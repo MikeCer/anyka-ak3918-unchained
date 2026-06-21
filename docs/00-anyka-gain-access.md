@@ -16,13 +16,33 @@ The active config file on the camera had `rtsp_support = 1` under `[global]` and
 
 Despite those settings, a port scan showed ports 80, 554, 7070, 8554, and 37777 all closed, which indicates that the expected services were not actually binding sockets at runtime. The startup script explains why this matters: it launches `cmd` and `discovery` only if `[cloud].onvif` is set to `1`, then attempts to start `anyka_ipc` in the background.
 
-## Phase 0: Find the camera IP address
+## Phase 0: Initial Wi-Fi Provisioning via Soft AP
+
+Before the camera can connect to your local network and be discovered, it must be provisioned with your Wi-Fi credentials. After a factory reset (usually by holding the reset button for 10 seconds), this camera family falls back to a **Soft Access Point (AP)** mode.
+
+1. Using a computer or smartphone, scan for Wi-Fi networks and connect to the camera's open, unprotected AP (the SSID is usually a long string starting with `ANYKA_` or similar).
+2. Once connected, check your device's network connection details to find the **Gateway IP** (this is the camera's IP address on the Soft AP network).
+3. Connect to that Gateway IP using an FTP client (e.g., FileZilla or `ftp` command line) with the default credentials (`admin` and an empty password).
+4. Download the `/etc/jffs2/anyka_cfg.ini` file.
+5. Edit the `[wireless]` section in the file to match your home Wi-Fi network:
+   ```ini
+   [wireless]
+   ssid = YourHomeWiFiName
+   mode = INFRA
+   security = WPA2PSK
+   password = YourHomeWiFiPassword
+   running = 1
+   ```
+6. Upload the modified `anyka_cfg.ini` back to `/etc/jffs2/anyka_cfg.ini`.
+7. Reboot the camera. It should now connect to your home Wi-Fi network instead of creating a Soft AP.
+
+## Phase 1: Find the camera IP address
 
 Before running any scripts, you need to know the camera's local IP address (referred to as `<CAMERA_IP>` in this guide). You can find this by:
 - Checking your home router's DHCP connected devices list.
 - Or, using `nmap` on your local network to scan for devices with an active FTP listener (port 21). Example: `nmap -p 21 192.168.1.0/24 --open`.
 
-## Phase 1: verify FTP and inventory the camera
+## Phase 2: verify FTP and inventory the camera
 
 Before changing anything, verify that FTP works and save a snapshot of the filesystem layout. This gives a baseline and confirms whether the camera matches the same model family and script layout as the reference unit.
 
@@ -126,7 +146,7 @@ chmod +x probe_camera_ftp.sh
 
 A camera that matches the reference model should show `anyka_ipc.sh` in `/sbin` and `libOnvif.so` plus `librtsp.so` in `/usr/lib`.
 
-## Phase 2: fetch the live config and startup script
+## Phase 3: fetch the live config and startup script
 
 The next step is to verify the exact config file the camera is using and read the startup wrapper that launches the camera daemon. On the reference unit, the live config was `/etc/jffs2/anyka_cfg.ini`, and the wrapper script was `/usr/sbin/anyka_ipc.sh`.
 
@@ -177,7 +197,7 @@ fi
 
 This means ONVIF controls whether `cmd` and `discovery` launch, while `anyka_ipc` is always attempted during `start`.
 
-## Phase 3: gain telnet access by replacing `/etc/jffs2/shadow`
+## Phase 4: gain telnet access by replacing `/etc/jffs2/shadow`
 
 If telnet is listening but the password is unknown, the cleanest recovery path is to back up `/etc/jffs2/shadow`, generate a known replacement hash for the `root` account, upload the modified file over FTP, and reboot the camera.
 
@@ -265,7 +285,7 @@ Then log in as:
 
 If `/etc/jffs2/shadow` is not writable or the upload path fails, test whether the platform instead stores the shadow file at `/etc/jffs/shadow`, which is a variant reported on related Anyka devices.
 
-## Phase 4: verify the shell and make a full safety backup
+## Phase 5: verify the shell and make a full safety backup
 
 As soon as telnet works, create a backup directory on the SD card or in `/tmp` and save copies of the critical files before making service changes.
 
@@ -284,7 +304,7 @@ cp /etc/inittab /mnt/backup_unlock/ 2>/dev/null || true
 
 The reference camera exposed `anyka_ipc.sh`, `service.sh`, `udisk.sh`, and `update.sh` through FTP, so these are the first files worth preserving before changes are made.
 
-## Phase 5: confirm whether `anyka_ipc` is running
+## Phase 6: confirm whether `anyka_ipc` is running
 
 On the reference camera, the live config enabled ONVIF and RTSP, but a network scan still showed all common service ports closed, which strongly suggests that `cmd`, `discovery`, and `anyka_ipc` were either not launched or exited immediately.
 
@@ -317,7 +337,7 @@ nmap -sV -p 80,554,8554,7070,37777 <CAMERA_IP>
 
 On the reference camera before manual intervention, ports 80, 554, 7070, 8554, and 37777 were all closed. If they open after a manual start, the problem is a boot-time launch issue rather than a missing binary or missing library.
 
-## Phase 6: inspect why `anyka_ipc` fails
+## Phase 7: inspect why `anyka_ipc` fails
 
 The likely failure mode on this model family is that `anyka_ipc` tries to contact a remote cloud endpoint and becomes stuck or exits before local services bind. Similar Anyka camera investigations report cloud-first startup behavior and hard dependencies on vendor endpoints for normal boot flow.
 
@@ -338,7 +358,7 @@ grep -A5 '^\[cloud\]' /etc/jffs2/anyka_cfg.ini
 
 On the reference camera, `[cloud]` contained `dana = 1`, `onvif = 1`, `tutk = 0`, `tencent = 0`, and `hk = 1`. If local services do not come up until cloud backends answer, reducing or disabling nonessential cloud flags may be required, but the original config should always be backed up first.
 
-## Phase 7: test conservative config changes
+## Phase 8: test conservative config changes
 
 After a full backup, the safest first change is to preserve ONVIF while reducing cloud-specific dependencies. On the analyzed camera, the minimal values of interest were:
 
