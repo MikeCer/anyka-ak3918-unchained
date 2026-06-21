@@ -16,6 +16,12 @@ The active config file on the camera had `rtsp_support = 1` under `[global]` and
 
 Despite those settings, a port scan showed ports 80, 554, 7070, 8554, and 37777 all closed, which indicates that the expected services were not actually binding sockets at runtime. The startup script explains why this matters: it launches `cmd` and `discovery` only if `[cloud].onvif` is set to `1`, then attempts to start `anyka_ipc` in the background.
 
+## Phase 0: Find the camera IP address
+
+Before running any scripts, you need to know the camera's local IP address (referred to as `<CAMERA_IP>` in this guide). You can find this by:
+- Checking your home router's DHCP connected devices list.
+- Or, using `nmap` on your local network to scan for devices with an active FTP listener (port 21). Example: `nmap -p 21 192.168.1.0/24 --open`.
+
 ## Phase 1: verify FTP and inventory the camera
 
 Before changing anything, verify that FTP works and save a snapshot of the filesystem layout. This gives a baseline and confirms whether the camera matches the same model family and script layout as the reference unit.
@@ -26,7 +32,7 @@ Use the following probe script:
 #!/usr/bin/env bash
 set -euo pipefail
 
-HOST="${1:-192.168.1.34}"
+HOST="${1:-<CAMERA_IP>}"
 USER_NAME="${2:-admin}"
 PASS="${3:-}"
 OUTDIR="${4:-camera_probe_$(date +%Y%m%d_%H%M%S)}"
@@ -115,7 +121,7 @@ Run it like this:
 
 ```bash
 chmod +x probe_camera_ftp.sh
-./probe_camera_ftp.sh 192.168.1.34 admin ""
+./probe_camera_ftp.sh <CAMERA_IP> admin ""
 ```
 
 A camera that matches the reference model should show `anyka_ipc.sh` in `/sbin` and `libOnvif.so` plus `librtsp.so` in `/usr/lib`.
@@ -130,7 +136,7 @@ Use this script to download both files:
 #!/usr/bin/env bash
 set -euo pipefail
 
-HOST="${1:-192.168.1.34}"
+HOST="${1:-<CAMERA_IP>}"
 USER_NAME="${2:-admin}"
 PASS="${3:-}"
 OUTDIR="${4:-anyka_rtsp_check_$(date +%Y%m%d_%H%M%S)}"
@@ -181,7 +187,7 @@ The following script performs the backup and replacement safely:
 #!/usr/bin/env bash
 set -euo pipefail
 
-HOST="${1:-192.168.1.34}"
+HOST="${1:-<CAMERA_IP>}"
 FTP_USER="${2:-admin}"
 FTP_PASS="${3:-}"
 NEWPASS="${4:-}"
@@ -189,7 +195,7 @@ OUTDIR="${5:-shadow_work_$(date +%Y%m%d_%H%M%S)}"
 
 if [ -z "$NEWPASS" ]; then
   echo "Usage: $0 <host> <ftp_user> <ftp_pass> <new_root_password> [outdir]"
-  echo "Example: $0 192.168.1.34 admin \"\" MyNewPass123"
+  echo "Example: $0 <CAMERA_IP> admin \"\" MyNewPass123"
   exit 1
 fi
 
@@ -239,7 +245,7 @@ Run it like this:
 
 ```bash
 chmod +x backup_set_telnet_shadow.sh
-./backup_set_telnet_shadow.sh 192.168.1.34 admin "" MyNewPass123
+./backup_set_telnet_shadow.sh <CAMERA_IP> admin "" MyNewPass123
 ```
 
 This approach edits only the `root` line and preserves the rest of the BusyBox-compatible shadow format. The hash generation uses `openssl passwd -1`, which produces MD5-crypt output compatible with older embedded Linux systems like these cameras.
@@ -249,7 +255,7 @@ This approach edits only the `root` line and preserves the rest of the BusyBox-c
 After rebooting the camera, try:
 
 ```bash
-telnet 192.168.1.34
+telnet <CAMERA_IP>
 ```
 
 Then log in as:
@@ -306,7 +312,7 @@ netstat -lnpt 2>/dev/null | grep -E ':80|:554|:8554|:7070|:37777'
 Then, from another machine on the LAN, run:
 
 ```bash
-nmap -sV -p 80,554,8554,7070,37777 192.168.1.34
+nmap -sV -p 80,554,8554,7070,37777 <CAMERA_IP>
 ```
 
 On the reference camera before manual intervention, ports 80, 554, 7070, 8554, and 37777 were all closed. If they open after a manual start, the problem is a boot-time launch issue rather than a missing binary or missing library.
@@ -366,7 +372,7 @@ netstat -lnpt 2>/dev/null | grep -E ':80|:554|:8554|:7070|:37777'
 and from the LAN:
 
 ```bash
-nmap -sV -p 80,554,8554,7070,37777 192.168.1.34
+nmap -sV -p 80,554,8554,7070,37777 <CAMERA_IP>
 ```
 
 ## Notes specific to this model family
