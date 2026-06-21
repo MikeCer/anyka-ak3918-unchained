@@ -28,10 +28,10 @@ Before the camera can connect to your local network and be discovered, it must b
    ```ini
    [wireless]
    ssid = YourHomeWiFiName
-   mode = INFRA
-   security = WPA2PSK
+   mode = Infra
+   security = wpa
    password = YourHomeWiFiPassword
-   running = 1
+   running = sta
    ```
 6. Upload the modified `anyka_cfg.ini` back to `/etc/jffs2/anyka_cfg.ini`.
 7. Reboot the camera. It should now connect to your home Wi-Fi network instead of creating a Soft AP.
